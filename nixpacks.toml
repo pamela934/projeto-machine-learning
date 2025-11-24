@@ -1,2 +1,2 @@
 [phases.setup]
-nixPkgs = ["python312"]
+nixPkgs = ["python311"] # MUDAR de "python312" para "python311"

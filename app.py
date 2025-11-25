@@ -5,6 +5,7 @@ from math import radians, sin, cos, sqrt, atan2
 
 app = Flask(__name__)
 
+# O Flask carregará esses arquivos. Se der erro, o problema é nas versões.
 modelo = joblib.load("modelo_categoria.pkl")
 encoders = joblib.load("encoders.pkl")
 hospitais = pd.read_csv("hospitais_final.csv")
@@ -17,45 +18,48 @@ def distancia_km(lat1, lon1, lat2, lon2):
     c = 2 * atan2(sqrt(a), sqrt(1-a))
     return R * c
 
+# 💡 ROTA DE TESTE (Permite verificar no navegador se a API está no ar)
+@app.route('/', methods=['GET'])
+def index():
+    return "API is running! Use POST /predict to get a prediction."
+
 @app.route("/predict", methods=["POST"])
 def predict():
     data = request.json
-
     sintoma = data.get("sintoma")
     intensidade = data.get("intensidade")
     urgencia = data.get("urgencia")
     lat = data.get("latitude")
     lon = data.get("longitude")
-
+    
     if not all([sintoma, intensidade, urgencia, lat, lon]):
         return jsonify({"erro": "sintoma, intensidade, urgencia, latitude e longitude são obrigatórios"}), 400
-
+    
+    # ... (O restante do seu código de previsão é mantido aqui) ...
+    
+    # Lógica de transformação e previsão
     X = {}
     for col, val in [("sintoma", sintoma), ("intensidade", intensidade), ("urgencia", urgencia)]:
         X[col] = encoders[col].transform([val])[0]
-
     X_df = pd.DataFrame([X])
-
     cat_num = modelo.predict(X_df)[0]
     categoria_pred = encoders["categoria"].inverse_transform([cat_num])[0]
-
+    
+    # ... (O restante da sua lógica de filtragem e distância é mantido aqui) ...
+    
     categorias_finais = [categoria_pred]
-
     if urgencia.lower() == "baixa" and categoria_pred == "SPA":
         categorias_finais.append("GERAL")
-
+    
     df_filtrado = hospitais[hospitais["categoria"].isin(categorias_finais)].copy()
-
     df_filtrado["dist_km"] = df_filtrado.apply(
         lambda row: distancia_km(lat, lon, row["lat"], row["lon"]),
         axis=1
     )
-
     df_ordenado = df_filtrado.sort_values("dist_km").reset_index(drop=True)
-
+    
     vistos = set()
     recomendados = []
-
     for _, row in df_ordenado.iterrows():
         if row["categoria"] not in vistos:
             recomendados.append({
@@ -68,12 +72,13 @@ def predict():
             vistos.add(row["categoria"])
         if len(recomendados) >= 2:
             break
-
+            
     return jsonify({
         "categoria_predita": categoria_pred,
         "categorias_finais": categorias_finais,
         "hospitais_recomendados": recomendados
     })
 
+# O Gunicorn (no Dockerfile) ignora esta parte, mas é útil para testes locais
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
